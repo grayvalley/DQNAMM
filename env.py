@@ -62,15 +62,44 @@ class DeterministicMarketMakingSimulator:
 
     @property
     def state(self):
+        
         return self.q[self.step_idx-1]
 
 
-    def inventory_change_reward(self, q_old, q_new):
+    def asymmetric_inventory_penalty(self):
+        """
+        Computes Asymmetrically dampened PnL reward as per
+        https://livrepository.liverpool.ac.uk/3020822/1/MM_aamas.pdf
+        """
+        
+        # Change in the mid price
+        mid_old = self.price_process[self.step_idx]
+        mid_new = self.price_process[self.step_idx + 1]
+        dmid = mid_new - mid_old
+        
+        # Inventory at the beginning of this period
+        q_old = self.q[self.step_idx - 1]
+        
+        # Inventory mark-to-market
+        mtm = q_old * dmid
+        
+        # Speculation is penalized
+        reward = -max(0, mtm)
+        
+        return reward
+    
+    def inventory_change_reward(self):
         """
         Compute reward based on steering of inventory into the right
         direction. If any case, we reward for action that
         steers inventory towards zero.
         """
+        
+        # Inventory at the beginning of this period
+        q_old = self.q[self.step_idx - 1]
+        
+        # Current inventory
+        q_new = self.q[self.step_idx]
         
         reward = 0
         
@@ -87,7 +116,7 @@ class DeterministicMarketMakingSimulator:
         elif q_old < 0: 
             reward = dq
                     
-        return 10*reward
+        return 0.01*reward
     
     
     def spread_capture_reward(self, bid_hit, ask_hit):
@@ -98,24 +127,29 @@ class DeterministicMarketMakingSimulator:
         reward = 0
         
         # If bid was filled, give a reward for posting liquidity
-        reward += bid_hit 
+        reward +=bid_hit 
         
         # If ask was filled, give a reward for posting liquidity
         reward += ask_hit
         
-        return 0.5 * reward
+        return 0.01*reward
+    
+    
+    def init_step(self):
+        
+        # Initialize inventory and cash position for current step
+        self.q[self.step_idx] = self.q[self.step_idx - 1]
+        self.x[self.step_idx] = self.x[self.step_idx - 1]
     
     def step(self, action):
+        
+        self.init_step()
         
         # Get action tuple
         action_tuple = self.action_space[action]
         
         # Bid and ask skews 
         n_bid_skew, n_ask_skew = action_tuple
-        
-        # Current inventory
-        q_old = self.q[self.step_idx-1]
-        
         
         # Fill probabilities for quoted spreads
         p_bid_hit = 0
@@ -126,10 +160,6 @@ class DeterministicMarketMakingSimulator:
         if n_ask_skew > 0:
             p_ask_hit =  1# fill_prob(self.ask_a, self.ask_k, spread_ask, self.dt)
                 
-        # Initialize inventory and cash position for current step
-        self.q[self.step_idx] = self.q[self.step_idx - 1]
-        self.x[self.step_idx] = self.x[self.step_idx - 1]
-            
         # Simulation of bid fill
         bid_hit = np.random.random_sample() <= p_bid_hit
         if bid_hit:
@@ -140,19 +170,22 @@ class DeterministicMarketMakingSimulator:
         if ask_hit:
             self.q[self.step_idx] -= 1
             
-        q_new = self.q[self.step_idx]
+        #q_new = self.q[self.step_idx]
+       
+        # Inventory mark to market
+        reward_inv_mtm = self.asymmetric_inventory_penalty()
         
-
+        # Inventory direction change
+        reward_inv_chg = self.inventory_change_reward()
+        
         # Compute spread change reward
         reward_spread = self.spread_capture_reward(bid_hit, ask_hit)
         
-        # Compute inventory change reward
-        reward_inventory = self.inventory_change_reward(q_old, q_new)
-        
         # Net reward
-        net_reward = reward_spread + reward_inventory
+        net_reward = reward_spread + reward_inv_chg + reward_inv_mtm
         
-        print(q_old, q_new, reward_spread, reward_inventory, net_reward)
+        #q_old = self.q[self.step_idx - 1]
+        #print(q_old, q_new, reward_spread, reward_inv_chg, reward_inv_mtm, net_reward)
 
         if self.step_idx < self.step_idx_max - 1:
             new_state = self.q[self.step_idx]
