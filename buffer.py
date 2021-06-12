@@ -1,14 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Fri Jun 11 21:27:55 2021
-
-@author: juha
-"""
-
-
 from tensorflow.keras.layers import Dense, Activation
-from tensorflow.keras.models import Sequential, load_model
+from tensorflow.keras.models import Sequential
 from tensorflow.keras.optimizers import Adam
 
 import numpy as np
@@ -63,9 +54,9 @@ def build(lr, n_actions, input_dims, fc1_dims, fc2_dims):
     
     model = Sequential([
             Dense(fc1_dims, input_shape=(input_dims,)),
-            Activation('relu'),
+            Activation('elu'),
             Dense(fc2_dims),
-            Activation('relu'),
+            Activation('elu'),
             Dense(n_actions)
             ])
     

@@ -1,4 +1,5 @@
 import numpy as np
+from tensorflow.keras.models import load_model
 
 from buffer import (
         ReplayBuffer,
@@ -21,8 +22,7 @@ class DQNAgent:
         self.batch_size = batch_size
         self.model_file = fname
         
-        self.memory = ReplayBuffer(mem_size, input_dims, n_actions,
-                                   discrete=True)
+        self.memory = ReplayBuffer(mem_size, input_dims, n_actions, discrete=True)
         
         self.q_eval = build(alpha, n_actions, input_dims, fc1_dims, fc2_dims)
         

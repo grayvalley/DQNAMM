@@ -1,7 +1,5 @@
 import numpy as np
 import random
-import tensorflow as tf
-
 from itertools import product
 
 
@@ -13,8 +11,11 @@ def fill_prob(lamda, kappa, distance, dt):
     return lamda * np.exp(-kappa * distance) * dt
 
 
-class SimpleMarketMakingSimulator:
-
+class DeterministicMarketMakingSimulator:
+    """
+    This is a deterministic market making environment. Deterministic in the
+    sense that fill probability is always 100%.
+    """
     def __init__(self, dim, sigma, bid_k, bid_a, ask_k, ask_a,
                  max_bid_depth, max_ask_depth, dt, inv_pen, rebate, s0=100):
 
@@ -63,6 +64,47 @@ class SimpleMarketMakingSimulator:
     def state(self):
         return self.q[self.step_idx-1]
 
+
+    def inventory_change_reward(self, q_old, q_new):
+        """
+        Compute reward based on steering of inventory into the right
+        direction. If any case, we reward for action that
+        steers inventory towards zero.
+        """
+        
+        reward = 0
+        
+        # Change in the nventory during this period
+        dq = q_new - q_old
+        
+        # If the agent has positive inventory, we want to reward for action
+        # that decreases the inventory towards zero.
+        if q_old > 0: 
+            reward = -dq
+                
+        # If the agent has negative inventory, we want to reward for action
+        # that increases the inventory towards zero.
+        elif q_old < 0: 
+            reward = dq
+                    
+        return 10*reward
+    
+    
+    def spread_capture_reward(self, bid_hit, ask_hit):
+        """
+        Compute reward based on captured spread
+        """
+        
+        reward = 0
+        
+        # If bid was filled, give a reward for posting liquidity
+        reward += bid_hit 
+        
+        # If ask was filled, give a reward for posting liquidity
+        reward += ask_hit
+        
+        return 0.5 * reward
+    
     def step(self, action):
         
         # Get action tuple
@@ -71,54 +113,46 @@ class SimpleMarketMakingSimulator:
         # Bid and ask skews 
         n_bid_skew, n_ask_skew = action_tuple
         
-        tick_size = 0.01
+        # Current inventory
+        q_old = self.q[self.step_idx-1]
         
-        # Actual spreads
-        spread_bid = n_bid_skew * tick_size
-        spread_ask = n_ask_skew * tick_size
         
-        # Quoted prices
-        price_bid = self.s - spread_bid
-        price_ask = self.s + spread_ask
-
         # Fill probabilities for quoted spreads
         p_bid_hit = 0
         if n_bid_skew > 0:
-            p_bid_hit = fill_prob(self.bid_a, self.bid_k, spread_bid, self.dt)
+            p_bid_hit = 1 #fill_prob(self.bid_a, self.bid_k, spread_bid, self.dt)
             
         p_ask_hit = 0
         if n_ask_skew > 0:
-            p_ask_hit = fill_prob(self.ask_a, self.ask_k, spread_ask, self.dt)
-
+            p_ask_hit =  1# fill_prob(self.ask_a, self.ask_k, spread_ask, self.dt)
+                
+        # Initialize inventory and cash position for current step
         self.q[self.step_idx] = self.q[self.step_idx - 1]
         self.x[self.step_idx] = self.x[self.step_idx - 1]
             
         # Simulation of bid fill
-        bid_hit = random.random() < p_bid_hit
+        bid_hit = np.random.random_sample() <= p_bid_hit
         if bid_hit:
             self.q[self.step_idx] += 1
-            self.x[self.step_idx] -= price_bid
-
+            
         # Simulation of ask fill
-        ask_hit = random.random() < p_ask_hit
+        ask_hit = np.random.random_sample() <= p_ask_hit
         if ask_hit:
             self.q[self.step_idx] -= 1
-            self.x[self.step_idx] += price_ask
-
+            
         q_new = self.q[self.step_idx]
+        
 
-        mid_next = self.price_process[self.step_idx + 1]
-
-        ask_capture = price_ask - mid_next
-        bid_capture = mid_next - price_bid
+        # Compute spread change reward
+        reward_spread = self.spread_capture_reward(bid_hit, ask_hit)
         
-        spread_pnl = 0
-        spread_pnl += (ask_capture + self.rebate) * ask_hit
-        spread_pnl += (bid_capture + self.rebate) * bid_hit
+        # Compute inventory change reward
+        reward_inventory = self.inventory_change_reward(q_old, q_new)
         
-        inventory_penalty = tick_size * np.abs(q_new)**2
+        # Net reward
+        net_reward = reward_spread + reward_inventory
         
-        net_reward = spread_pnl - inventory_penalty
+        print(q_old, q_new, reward_spread, reward_inventory, net_reward)
 
         if self.step_idx < self.step_idx_max - 1:
             new_state = self.q[self.step_idx]
