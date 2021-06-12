@@ -40,7 +40,7 @@ def main():
             fc2_dims = 8,
             n_actions = len(env.action_space), 
             mem_size = 1000000, 
-            batch_size = 1000,
+            batch_size = 2500,
             epsilon_dec=0.999999
             )
     

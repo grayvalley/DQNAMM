@@ -109,12 +109,12 @@ class DeterministicMarketMakingSimulator:
         # If the agent has positive inventory, we want to reward for action
         # that decreases the inventory towards zero.
         if q_old > 0: 
-            reward = -dq
+            reward = -dq*np.abs(q_old)
                 
         # If the agent has negative inventory, we want to reward for action
         # that increases the inventory towards zero.
         elif q_old < 0: 
-            reward = dq
+            reward = dq*np.abs(q_old)
                     
         return 0.01*reward
     
@@ -170,7 +170,7 @@ class DeterministicMarketMakingSimulator:
         if ask_hit:
             self.q[self.step_idx] -= 1
             
-        #q_new = self.q[self.step_idx]
+        q_new = self.q[self.step_idx]
        
         # Inventory mark to market
         reward_inv_mtm = self.asymmetric_inventory_penalty()
@@ -182,10 +182,11 @@ class DeterministicMarketMakingSimulator:
         reward_spread = self.spread_capture_reward(bid_hit, ask_hit)
         
         # Net reward
-        net_reward = reward_spread + reward_inv_chg + reward_inv_mtm
+        net_reward = reward_spread + reward_inv_chg + reward_inv_mtm 
         
-        #q_old = self.q[self.step_idx - 1]
-        #print(q_old, q_new, reward_spread, reward_inv_chg, reward_inv_mtm, net_reward)
+        q_old = self.q[self.step_idx - 1]
+        print(q_old, q_new, reward_spread, reward_inv_chg, "{:.5f}".format(reward_inv_mtm),
+              "{:.5f}".format(net_reward))
 
         if self.step_idx < self.step_idx_max - 1:
             new_state = self.q[self.step_idx]
